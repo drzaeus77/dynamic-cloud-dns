@@ -2,7 +2,9 @@
 
 const ipHelper = require('ip');
 const {DNS} = require('@google-cloud/dns');
-const settings = require('./settings.json');
+const settings = require('/secret/settings.json');
+const { authenticator } = require('otplib');
+const axios = require('axios');
 
 const dns = new DNS();
 /**
@@ -81,6 +83,15 @@ exports.updateHost = function(req, res) {
         ipv6: ipv6
     });
 
+    updateSonic(ipv4)
+      .catch(err =>
+        respondWithError(
+            err.code || 500,
+            err.title || 'Sonic error',
+            err.message,
+            res
+          )
+      );
     updateHosts(zone, host, ipv4, ipv6)
         .then(data => {
             res.status(200).json(data);
@@ -167,3 +178,76 @@ function updateRecords(zone, host, ipv4, ipv6) {
         });
     });
 }
+
+function updateSonic(ipv4) {
+
+  const instance = axios.create({
+    baseURL: 'https://members.sonic.net/',
+    timeout: 1000,
+    maxRedirects: 0,
+    withCredentials: true,
+    validateStatus: function (status) {
+      return status >= 200 && status <= 302
+    },
+    headers: {
+      'Origin': 'https://members.sonic.net',
+      'Accept': 'text/html,application/xhtml+xml,application/xml',
+      'Accept-Language': 'Accept-Language: en-US,en;q=0.5',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Referer': 'https://members.sonic.net/',
+      'Upgrade-Insecure-Requests': '1',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'same-origin',
+      'Sec-Fetch-User': '?1',
+    },
+  });
+
+  const params = new URLSearchParams({login: 'login', user: settings.sonicUser, pw: settings.sonicPw});
+
+  var headers = {'content-type': 'application/x-www-form-urlencoded'};
+  return instance.post('/', params, {headers})
+    .then(function (response) {
+      //console.log(response);
+      if (response.status !== 302) {
+        throw new Error('Expected 302, got ' + response.status);
+      }
+      const pcookie = (response.headers['set-cookie']).find(cookie => cookie.includes('PHPSESSID'))?.match(new RegExp(`^(PHPSESSID=.+?);`))?.[1];
+      var cookie = pcookie;
+      const vcookie = (response.headers['set-cookie']).find(cookie => cookie.includes('__vua'))?.match(new RegExp(`^(__vua=.+?);`))?.[1];
+      cookie += '; ' + vcookie;
+      Object.assign(headers, {Cookie: cookie});
+      //console.log(headers);
+      const mfaparams = new URLSearchParams({
+        '2sv_auth': authenticator.generate(settings.sonicSecret),
+        backup_code: '',
+        '2sv_remember': 1
+      });
+      instance.post('/', mfaparams, {headers})
+        .then(function (response) {
+          //console.log(response);
+          if (response.status !== 302) {
+            throw new Error('Expected 302, got ' + response.status);
+          }
+          const mcookie = (response.headers['set-cookie']).find(cookie => cookie.includes('mt2FAToken'))?.match(new RegExp(`^(mt2FAToken=.+?);`))?.[1];
+          cookie += '; ' + mcookie;
+          Object.assign(headers, {Cookie: cookie});
+          const ipv6params = new URLSearchParams({endpoint: ipv4, rdns_server: 'none', change: 1, action: 'step1'});
+          instance.post('/labs/ipv6tunnel/#', ipv6params, {headers})
+            .then(function (response) {
+              console.log('Sonic updated: ' + response.statusText);
+              //console.log(response);
+            })
+            .catch(function (error) {
+              console.error(error);
+            });
+        })
+        .catch(function (error) {
+          console.error(error);
+        });
+    })
+    .catch(function (error) {
+      console.error(error);
+    });
+}
+

@@ -1,11 +1,13 @@
 {
   "name": "dynamic-cloud-dns",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Dynamic DNS functionality backed by Google Cloud DNS.",
   "main": "index.js",
   "dependencies": {
     "@google-cloud/dns": "^3.0.2",
-    "ip": "^1.1.5"
+    "axios": "^1.3.4",
+    "ip": "^1.1.5",
+    "otplib": "^12.0.1"
   },
   "devDependencies": {
     "@google-cloud/functions-framework": "^1.4.0"
@@ -13,16 +15,16 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "functions-framework --target=updateHost",
-    "deploy": "gcloud functions deploy updateHost --source . --runtime nodejs8 --trigger-http"
+    "deploy": "gcloud functions deploy fdfdc6b6-7112-4636-b37e-f90d61a4b256 --source . --runtime nodejs16 --allow-unauthenticated --entry-point updateHost --gen2 --memory=128Mi --run-service-account=dns-cloud-function@dowhile0-net.iam.gserviceaccount.com --trigger-http --max-instances=1 --set-secrets=/secret/settings.json=ddns-settings:latest"
   },
   "author": "Simon Rüegg <simon@rueggs.ch>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/srueg/dynamic-cloud-dns.git"
+    "url": "git+https://github.com/drzaeus77/dynamic-cloud-dns.git"
   },
   "bugs": {
-    "url": "https://github.com/srueg/dynamic-cloud-dns/issues"
+    "url": "https://github.com/drzaeus77/dynamic-cloud-dns/issues"
   },
-  "homepage": "https://github.com/srueg/dynamic-cloud-dns"
+  "homepage": "https://github.com/drzaeus77/dynamic-cloud-dns"
 }
